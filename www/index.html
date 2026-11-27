@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<title>mesh chat</title>
+<style>
+:root{
+  --bg:#060C09;--surface:#0D1A10;--surface2:#152A1A;
+  --green:#2ECC40;--green-dim:#1A7A25;--green-glow:#2ECC4044;
+  --red:#FF3B3B;--red-glow:#FF3B3B44;
+  --yellow:#FFD700;--yellow-glow:#FFD70044;
+  --gray:#4A5A4F;--gray-light:#7A9A7F;--white:#D8F0DC;
+  --grid:#1A2E1E;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;background:var(--bg);color:var(--white);font-family:'Courier New',monospace;overflow:hidden;}
+body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bottom:var(--safe-bot);}
+
+/* HEADER */
+#header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--grid);}
+#callsign{font-size:11px;color:var(--green);letter-spacing:2px;}
+#appname{font-size:17px;font-weight:900;letter-spacing:4px;color:var(--white);}
+#appname span{color:var(--green);}
+#bandpill{font-size:10px;padding:3px 8px;border:1px solid var(--green);color:var(--green);letter-spacing:2px;cursor:pointer;}
+
+/* TABS CONTENT */
+#content{flex:1;overflow:hidden;position:relative;}
+.tab{display:none;height:100%;overflow-y:auto;padding:12px;}
+.tab.active{display:flex;flex-direction:column;}
+
+/* NAV */
+#nav{display:flex;background:var(--surface);border-top:1px solid var(--grid);}
+.navbtn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px;border:none;background:transparent;color:var(--gray);cursor:pointer;font-family:'Courier New',monospace;font-size:9px;letter-spacing:1px;gap:3px;}
+.navbtn .icon{font-size:20px;}
+.navbtn.active{color:var(--green);}
+.navbtn#nav-alert.active{color:var(--red);}
+
+/* PTT */
+#ptt-area{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 0;background:var(--surface);margin-bottom:12px;border:1px solid var(--grid);}
+#ptt-ring{position:absolute;border-radius:50%;border:3px solid var(--green);opacity:0;width:172px;height:172px;pointer-events:none;}
+#ptt-btn{width:140px;height:140px;border-radius:50%;border:3px solid var(--green);background:var(--green-glow);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;user-select:none;position:relative;}
+#ptt-btn.tx{border-color:var(--red);background:var(--red-glow);}
+#ptt-btn.tx #ptt-ring{border-color:var(--red);}
+#ptt-icon{font-size:38px;}
+#ptt-label{font-size:12px;font-weight:900;letter-spacing:4px;margin-top:4px;color:var(--green);}
+#ptt-btn.tx #ptt-label{color:var(--red);}
+#ptt-hint{margin-top:14px;font-size:9px;color:var(--gray-light);letter-spacing:2px;}
+
+/* MESSAGES */
+#msg-list{flex:1;overflow-y:auto;display:flex;flex-direction:column-reverse;gap:6px;padding-bottom:4px;}
+.msg{display:flex;flex-direction:column;max-width:85%;}
+.msg.mine{align-self:flex-end;align-items:flex-end;}
+.msg.other{align-self:flex-start;}
+.msg-sender{font-size:9px;color:var(--green);letter-spacing:1px;margin-bottom:3px;}
+.msg-bubble{padding:10px;border:1px solid var(--grid);background:var(--surface2);}
+.msg.mine .msg-bubble{border-color:var(--green-dim);background:rgba(46,204,64,.1);}
+.msg-voice{display:flex;align-items:center;gap:8px;cursor:pointer;}
+.msg-voice .play{color:var(--green);font-size:18px;}
+.waveform{display:flex;align-items:center;gap:2px;}
+.waveform span{display:inline-block;width:3px;background:var(--green);border-radius:2px;}
+.msg-time{font-size:8px;color:var(--gray);margin-top:3px;}
+.msg-alert{color:var(--yellow);font-weight:bold;}
+.msg-alert .msg-bubble{border-color:var(--yellow);background:var(--yellow-glow);}
+
+/* BANDS */
+.band-list{display:flex;flex-direction:column;gap:1px;}
+.band-row{display:flex;align-items:center;padding:14px 12px;border:1px solid var(--grid);cursor:pointer;background:var(--bg);}
+.band-row.active{background:var(--surface);border-color:var(--green);}
+.band-id{width:36px;height:36px;border:1px solid var(--grid);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;margin-right:14px;color:var(--gray);}
+.band-row.active .band-id{border-color:var(--green);color:var(--green);}
+.band-info{flex:1;}
+.band-name{font-size:13px;font-weight:700;letter-spacing:2px;color:var(--white);}
+.band-row.active .band-name{color:var(--green);}
+.band-meta{font-size:9px;color:var(--gray);margin-top:3px;letter-spacing:1px;}
+.band-active-tag{font-size:9px;color:var(--green);letter-spacing:2px;}
+.section-title{font-size:9px;color:var(--gray-light);letter-spacing:3px;padding:12px 0 8px;border-bottom:1px solid var(--grid);margin-bottom:8px;}
+
+/* PRIVATE BANDS */
+#private-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100;align-items:center;justify-content:center;}
+#private-modal.open{display:flex;}
+#modal-box{background:var(--surface);border:1px solid var(--green);padding:20px;width:90%;max-width:360px;}
+#modal-box h3{font-size:14px;color:var(--green);letter-spacing:3px;margin-bottom:16px;}
+.modal-input{width:100%;background:var(--surface2);border:1px solid var(--grid);color:var(--white);font-family:'Courier New',monospace;font-size:13px;padding:10px;margin-bottom:10px;}
+.modal-btn{width:100%;padding:12px;border:1px solid var(--green);background:var(--green-glow);color:var(--green);font-family:'Courier New',monospace;font-size:12px;letter-spacing:2px;cursor:pointer;margin-bottom:8px;}
+.modal-btn.danger{border-color:var(--red);background:var(--red-glow);color:var(--red);}
+#qr-container{display:flex;justify-content:center;margin:12px 0;}
+#qr-container canvas,#qr-container img{max-width:160px;}
+
+/* ALERT */
+#alert-btn{border:2px solid var(--red);background:var(--red-glow);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;cursor:pointer;margin-bottom:16px;user-select:none;}
+#alert-btn .alert-icon{font-size:36px;margin-bottom:8px;}
+#alert-btn .alert-label{font-size:16px;font-weight:900;color:var(--red);letter-spacing:4px;}
+#alert-btn .alert-sub{font-size:9px;color:var(--gray);margin-top:6px;letter-spacing:1px;}
+#alert-input{width:100%;background:var(--surface2);border:1px solid var(--grid);color:var(--white);font-family:'Courier New',monospace;font-size:14px;padding:12px;margin-bottom:4px;resize:none;min-height:80px;}
+#alert-chars{text-align:right;font-size:9px;color:var(--gray);margin-bottom:12px;}
+#active-alerts{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+.alert-card{border:1px solid rgba(255,59,59,.5);background:var(--surface);padding:12px;}
+.alert-card-from{font-size:9px;color:var(--red);letter-spacing:2px;margin-bottom:6px;}
+.alert-card-msg{font-size:14px;color:var(--yellow);font-weight:bold;}
+
+/* CONFIG */
+.config-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(26,46,30,.5);}
+.config-label{font-size:12px;color:var(--gray-light);letter-spacing:1px;}
+.config-val{font-size:12px;color:var(--green);}
+.config-input{background:var(--surface2);border:1px solid var(--grid);color:var(--white);font-family:'Courier New',monospace;font-size:12px;padding:6px 10px;width:140px;}
+.config-btn{padding:8px 14px;border:1px solid var(--green);background:var(--green-glow);color:var(--green);font-family:'Courier New',monospace;font-size:10px;letter-spacing:2px;cursor:pointer;}
+
+/* SILENT MODE indicator */
+#silent-ind{font-size:10px;padding:2px 8px;border:1px solid var(--gray);color:var(--gray);letter-spacing:2px;cursor:pointer;}
+#silent-ind.on{border-color:var(--yellow);color:var(--yellow);}
+
+/* QR SCANNER */
+#scanner-wrap{display:none;position:fixed;inset:0;background:#000;z-index:200;flex-direction:column;align-items:center;justify-content:center;}
+#scanner-wrap.open{display:flex;}
+#scanner-video{width:100%;max-width:400px;}
+#scanner-close{margin-top:16px;padding:12px 24px;border:1px solid var(--white);color:var(--white);background:transparent;font-family:'Courier New',monospace;font-size:12px;cursor:pointer;}
+
+/* SIGNATURE */
+#sig{text-align:center;padding:6px 0 2px;font-size:9px;color:var(--gray);letter-spacing:4px;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div>
+    <div id="appname">MESH<span>CHAT</span></div>
+    <div id="callsign">···</div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+    <div id="silent-ind" onclick="toggleSilent()">🔇 SILENCIO</div>
+    <div id="bandpill" onclick="goTab('bandas')">BANDA-01</div>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div id="content">
+
+  <!-- RADIO TAB -->
+  <div class="tab active" id="tab-radio">
+    <div id="ptt-area">
+      <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+        <div id="ptt-ring"></div>
+        <div id="ptt-btn"
+          ontouchstart="pttStart(event)" ontouchend="pttEnd(event)"
+          onmousedown="pttStart(event)" onmouseup="pttEnd(event)" onmouseleave="pttEnd(event)">
+          <div id="ptt-icon">🎙</div>
+          <div id="ptt-label">PTT</div>
+        </div>
+      </div>
+      <div id="ptt-hint">MANTÉN PRESIONADO · 20s MÁX</div>
+    </div>
+    <div id="msg-list"></div>
+    <div id="sig">bygrind</div>
+  </div>
+
+  <!-- BANDAS TAB -->
+  <div class="tab" id="tab-bandas">
+    <div class="section-title">SELECCIONA BANDA</div>
+    <div class="band-list" id="band-list"></div>
+    <div class="section-title" style="margin-top:16px;">BANDAS PRIVADAS</div>
+    <button class="modal-btn" onclick="openPrivateModal('create')" style="width:100%;margin-bottom:8px;">+ CREAR BANDA PRIVADA</button>
+    <button class="modal-btn" onclick="openPrivateModal('join')" style="width:100%;">📷 ESCANEAR QR · UNIRSE</button>
+    <div class="band-list" id="private-band-list" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- ALERTA TAB -->
+  <div class="tab" id="tab-alerta">
+    <div id="active-alerts"></div>
+    <div class="section-title">ENVIAR ALERTA AMBER</div>
+    <textarea id="alert-input" maxlength="120" placeholder="Mensaje de alerta..." oninput="updateAlertChars()"></textarea>
+    <div id="alert-chars">0/120</div>
+    <div id="alert-btn" onclick="sendAlert()">
+      <div class="alert-icon">⚠</div>
+      <div class="alert-label">ENVIAR ALERTA</div>
+      <div class="alert-sub">VIBRA EN TODOS LOS DISPOSITIVOS</div>
+    </div>
+  </div>
+
+  <!-- CONFIG TAB -->
+  <div class="tab" id="tab-config">
+    <div class="section-title">IDENTIDAD</div>
+    <div class="config-row">
+      <span class="config-label">INDICATIVO</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input class="config-input" id="callsign-input" maxlength="20" placeholder="SHADOW-TANGO"/>
+        <button class="config-btn" onclick="saveCallsign()">OK</button>
+      </div>
+    </div>
+    <div class="section-title" style="margin-top:16px;">SEGURIDAD</div>
+    <div class="config-row"><span class="config-label">CAPTURAS</span><span class="config-val">BLOQUEADAS ✓</span></div>
+    <div class="config-row"><span class="config-label">NUBE</span><span class="config-val">DESACTIVADA ✓</span></div>
+    <div class="config-row"><span class="config-label">CIFRADO</span><span class="config-val">AES-256-GCM ✓</span></div>
+    <div class="config-row"><span class="config-label">AUTO-BORRADO</span><span class="config-val">SILENCIOSO ✓</span></div>
+    <div class="section-title" style="margin-top:16px;">COMPARTIR APP</div>
+    <button class="modal-btn" onclick="shareApk()" style="width:100%;">📤 ENVIAR APK POR BLUETOOTH</button>
+    <div id="sig" style="margin-top:16px;">bygrind</div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav id="nav">
+  <button class="navbtn active" id="nav-radio" onclick="goTab('radio')"><span class="icon">📡</span>RADIO</button>
+  <button class="navbtn" id="nav-bandas" onclick="goTab('bandas')"><span class="icon">⚡</span>BANDAS</button>
+  <button class="navbtn" id="nav-alerta" onclick="goTab('alerta')"><span class="icon">⚠</span>ALERTA</button>
+  <button class="navbtn" id="nav-config" onclick="goTab('config')"><span class="icon">⚙</span>CONFIG</button>
+</nav>
+
+<!-- PRIVATE BAND MODAL -->
+<div id="private-modal">
+  <div id="modal-box">
+    <h3 id="modal-title">BANDA PRIVADA</h3>
+    <div id="modal-content"></div>
+    <button class="modal-btn danger" onclick="closePrivateModal()">CANCELAR</button>
+  </div>
+</div>
+
+<!-- QR SCANNER -->
+<div id="scanner-wrap">
+  <video id="scanner-video" autoplay playsinline></video>
+  <canvas id="scanner-canvas" style="display:none;"></canvas>
+  <button id="scanner-close" onclick="closeScanner()">CERRAR</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+'use strict';
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+const STATE = {
+  callsign: localStorage.getItem('callsign') || generateCallsign(),
+  currentBand: parseInt(localStorage.getItem('band') || '1'),
+  silentMode: localStorage.getItem('silent') === '1',
+  messages: [],       // in RAM only, never stored
+  alerts: [],
+  privateBands: JSON.parse(localStorage.getItem('privateBands') || '[]'),
+  bandKeys: {},       // derived AES keys cache
+  pttActive: false,
+  pttTimer: null,
+  mediaRecorder: null,
+  audioChunks: [],
+  audioCtx: null,
+};
+
+// ─── BANDS ───────────────────────────────────────────────────────────────────
+const BANDS = [
+  { id: 0,  name: 'PUBLICA',   encrypted: false, color: '#FFD700' },
+  ...Array.from({length:6}, (_,i) => ({ id: i+1, name: `BANDA-0${i+1}`, encrypted: true, color: '#2ECC40' })),
+];
+const BAND_MASTER = 'bygrind_mesh_2024_K3y!';
+const MSG_TTL = 30 * 60 * 1000;
+const ALERT_TTL = 5 * 60 * 1000;
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('callsign').textContent = STATE.callsign;
+  document.getElementById('callsign-input').value = STATE.callsign;
+  updateSilentUI();
+  renderBands();
+  renderPrivateBands();
+  updateBandPill();
+  startAutoDelete();
+});
+
+// ─── CALLSIGN ─────────────────────────────────────────────────────────────────
+function generateCallsign() {
+  const colors = ['RED','BLUE','GREEN','BLACK','SHADOW','VIPER','EAGLE','WOLF','HAWK','RAVEN'];
+  const alpha = ['ALFA','BRAVO','CHARLIE','DELTA','ECHO','FOXTROT','GOLF','HOTEL','INDIA','JULIET','KILO','LIMA','MIKE','NOVEMBRE','OSCAR','PAPA','ROMEO','SIERRA','TANGO','ZULU'];
+  const c = colors[Math.floor(Math.random()*colors.length)];
+  const a = alpha[Math.floor(Math.random()*alpha.length)];
+  const cs = `${c}-${a}`;
+  localStorage.setItem('callsign', cs);
+  return cs;
+}
+function saveCallsign() {
+  const v = document.getElementById('callsign-input').value.toUpperCase().replace(/[^A-Z0-9\-]/g,'').trim();
+  if (v.length < 3) return;
+  STATE.callsign = v;
+  localStorage.setItem('callsign', v);
+  document.getElementById('callsign').textContent = v;
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function goTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+}
+
+// ─── SILENT MODE ──────────────────────────────────────────────────────────────
+function toggleSilent() {
+  STATE.silentMode = !STATE.silentMode;
+  localStorage.setItem('silent', STATE.silentMode ? '1' : '0');
+  updateSilentUI();
+}
+function updateSilentUI() {
+  const el = document.getElementById('silent-ind');
+  if (STATE.silentMode) { el.textContent = '🔇 SILENCIO'; el.classList.add('on'); }
+  else { el.textContent = '🔊 ACTIVO'; el.classList.remove('on'); }
+}
+
+// ─── AUDIO CTX ────────────────────────────────────────────────────────────────
+function getAudioCtx() {
+  if (!STATE.audioCtx) STATE.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return STATE.audioCtx;
+}
+
+function playTone(freq1, freq2, duration, vol=0.3) {
+  if (STATE.silentMode) return;
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.frequency.setValueAtTime(freq1, ctx.currentTime);
+  if (freq2) osc.frequency.exponentialRampToValueAtTime(freq2, ctx.currentTime + duration * 0.6);
+  gain.gain.setValueAtTime(vol, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  osc.start(); osc.stop(ctx.currentTime + duration);
+}
+
+function playNextelChirp() { playTone(1200, 800, 0.15); }
+function playRogerBeep()  { setTimeout(() => playTone(1000, null, 0.12), 50); }
+function playNextelIncoming() {
+  if (STATE.silentMode) return;
+  const ctx = getAudioCtx();
+  [0, 0.18, 0.36].forEach(t => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = t === 0.36 ? 1400 : 1200;
+    g.gain.setValueAtTime(0.25, ctx.currentTime + t);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.14);
+    o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.15);
+  });
+}
+
+// ─── PTT ─────────────────────────────────────────────────────────────────────
+let pttStartTime = null;
+
+async function pttStart(e) {
+  e.preventDefault();
+  if (STATE.pttActive) return;
+  STATE.pttActive = true;
+
+  playNextelChirp();
+
+  const btn = document.getElementById('ptt-btn');
+  btn.classList.add('tx');
+  document.getElementById('ptt-icon').textContent = '📡';
+  document.getElementById('ptt-label').textContent = 'TX';
+  document.getElementById('ptt-hint').textContent = 'TRANSMITIENDO...';
+  animatePTTRing(true);
+
+  pttStartTime = Date.now();
+  STATE.audioChunks = [];
+
+  // 20s auto-cutoff
+  STATE.pttTimer = setTimeout(() => pttEnd(null), 20000);
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    STATE.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    STATE.mediaRecorder.ondataavailable = e => { if (e.data.size > 0) STATE.audioChunks.push(e.data); };
+    STATE.mediaRecorder.start(100);
+  } catch(err) {
+    console.warn('Mic error:', err);
+    pttEnd(null);
+  }
+}
+
+async function pttEnd(e) {
+  if (e) e.preventDefault();
+  if (!STATE.pttActive) return;
+  STATE.pttActive = false;
+  clearTimeout(STATE.pttTimer);
+
+  playRogerBeep();
+
+  const btn = document.getElementById('ptt-btn');
+  btn.classList.remove('tx');
+  document.getElementById('ptt-icon').textContent = '🎙';
+  document.getElementById('ptt-label').textContent = 'PTT';
+  document.getElementById('ptt-hint').textContent = 'MANTÉN PRESIONADO · 20s MÁX';
+  animatePTTRing(false);
+
+  if (STATE.mediaRecorder && STATE.mediaRecorder.state !== 'inactive') {
+    STATE.mediaRecorder.stop();
+    STATE.mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    await new Promise(r => setTimeout(r, 200));
+
+    if (STATE.audioChunks.length > 0) {
+      const blob = new Blob(STATE.audioChunks, { type: 'audio/webm' });
+      const b64 = await blobToBase64(blob);
+      const msg = {
+        id: uid(),
+        type: 'voice',
+        sender: STATE.callsign,
+        band: STATE.currentBand,
+        data: b64,
+        ts: Date.now(),
+        mine: true,
+        expires: Date.now() + MSG_TTL,
+      };
+      addMessage(msg);
+      await broadcastMessage(msg);
+    }
+  }
+}
+
+function animatePTTRing(on) {
+  const ring = document.getElementById('ptt-ring');
+  if (on) {
+    let scale = 1, dir = 1;
+    ring._anim = setInterval(() => {
+      scale += dir * 0.015;
+      if (scale > 1.35) dir = -1;
+      if (scale < 1.0) dir = 1;
+      ring.style.transform = `scale(${scale})`;
+      ring.style.opacity = (scale - 1) * 2.5;
+    }, 30);
+  } else {
+    clearInterval(ring._anim);
+    ring.style.transform = 'scale(1)';
+    ring.style.opacity = 0;
+  }
+}
+
+// ─── MESSAGES ─────────────────────────────────────────────────────────────────
+function addMessage(msg) {
+  STATE.messages.unshift(msg);
+  if (STATE.messages.length > 100) STATE.messages.pop();
+  renderMessages();
+}
+
+function renderMessages() {
+  const list = document.getElementById('msg-list');
+  const band = STATE.currentBand;
+  const msgs = STATE.messages.filter(m => m.band === band);
+
+  list.innerHTML = msgs.map(m => {
+    const time = new Date(m.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const cls = m.mine ? 'msg mine' : 'msg other';
+    const sender = m.mine ? '' : `<div class="msg-sender">${m.sender}</div>`;
+    let content = '';
+    if (m.type === 'voice') {
+      const heights = [8,14,10,16,12,18,10,14,8,16,12,10,14].map(h => `<span style="height:${h}px"></span>`).join('');
+      content = `<div class="msg-voice" onclick="playVoice('${m.id}')"><span class="play">▶</span><span style="font-size:9px;color:var(--green);letter-spacing:2px;">VOZ</span><div class="waveform">${heights}</div></div>`;
+    } else if (m.type === 'alert') {
+      content = `<span class="msg-alert">⚠ ${m.data}</span>`;
+    } else {
+      content = `<span style="font-size:14px;">${m.data}</span>`;
+    }
+    return `<div class="${cls}">${sender}<div class="msg-bubble">${content}</div><div class="msg-time">${time}</div></div>`;
+  }).join('');
+}
+
+const voiceCache = {};
+function playVoice(id) {
+  const msg = STATE.messages.find(m => m.id === id);
+  if (!msg || !msg.data) return;
+  playNextelIncoming();
+  setTimeout(() => {
+    const blob = base64ToBlob(msg.data, 'audio/webm');
+    const url = voiceCache[id] || (voiceCache[id] = URL.createObjectURL(blob));
+    const audio = new Audio(url);
+    audio.play().catch(()=>{});
+  }, 400);
+}
+
+// ─── TTS ─────────────────────────────────────────────────────────────────────
+function ttsSpeak(text) {
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'es-MX'; u.rate = 1.0;
+  speechSynthesis.speak(u);
+}
+
+// ─── AMBER ALERT ─────────────────────────────────────────────────────────────
+function updateAlertChars() {
+  const v = document.getElementById('alert-input').value;
+  document.getElementById('alert-chars').textContent = `${v.length}/120`;
+}
+
+async function sendAlert() {
+  const text = document.getElementById('alert-input').value.trim();
+  if (!text) return;
+
+  // Vibrate
+  if (navigator.vibrate) navigator.vibrate([500,200,500,200,1000]);
+
+  const msg = {
+    id: uid(), type: 'alert', sender: STATE.callsign,
+    band: STATE.currentBand, data: text,
+    ts: Date.now(), mine: true, expires: Date.now() + ALERT_TTL,
+  };
+  addMessage(msg);
+  showAlertCard(msg);
+  await broadcastMessage(msg);
+
+  // TTS always fires for alerts regardless of silent mode
+  const ctx = getAudioCtx();
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.connect(g); g.connect(ctx.destination);
+  o.frequency.value = 880;
+  g.gain.setValueAtTime(0.5, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+  o.start(); o.stop(ctx.currentTime + 0.8);
+  setTimeout(() => ttsSpeak(`Alerta amber: ${text}`), 900);
+
+  document.getElementById('alert-input').value = '';
+  document.getElementById('alert-chars').textContent = '0/120';
+}
+
+function showAlertCard(msg) {
+  STATE.alerts.push(msg);
+  renderAlerts();
+  setTimeout(() => {
+    STATE.alerts = STATE.alerts.filter(a => a.id !== msg.id);
+    renderAlerts();
+  }, ALERT_TTL);
+}
+
+function renderAlerts() {
+  const el = document.getElementById('active-alerts');
+  el.innerHTML = STATE.alerts.map(a => `
+    <div class="alert-card">
+      <div class="alert-card-from">${a.sender} · ⚠ ALERTA</div>
+      <div class="alert-card-msg">${a.data}</div>
+    </div>`).join('');
+}
+
+// ─── BANDS ────────────────────────────────────────────────────────────────────
+function renderBands() {
+  const list = document.getElementById('band-list');
+  list.innerHTML = BANDS.map(b => {
+    const active = b.id === STATE.currentBand;
+    return `<div class="band-row${active?' active':''}" onclick="selectBand(${b.id})">
+      <div class="band-id">${String(b.id).padStart(2,'0')}</div>
+      <div class="band-info">
+        <div class="band-name">${b.name}</div>
+        <div class="band-meta">${b.encrypted ? '🔒 AES-256-GCM' : '🔓 SIN CIFRAR · PÚBLICA'}</div>
+      </div>
+      ${active ? '<div class="band-active-tag">◀ EN USO</div>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderPrivateBands() {
+  const list = document.getElementById('private-band-list');
+  list.innerHTML = STATE.privateBands.map((b,i) => {
+    const active = b.id === STATE.currentBand;
+    return `<div class="band-row${active?' active':''}" onclick="selectBand('${b.id}')">
+      <div class="band-id" style="font-size:10px;">🔑</div>
+      <div class="band-info">
+        <div class="band-name">${b.name}</div>
+        <div class="band-meta">🔒 PRIVADA · AES-256-GCM</div>
+      </div>
+      ${active ? '<div class="band-active-tag">◀ EN USO</div>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function selectBand(id) {
+  STATE.currentBand = id;
+  localStorage.setItem('band', id);
+  updateBandPill();
+  renderBands();
+  renderPrivateBands();
+  renderMessages();
+}
+
+function updateBandPill() {
+  const b = BANDS.find(b => b.id === STATE.currentBand);
+  const pb = STATE.privateBands.find(b => b.id === STATE.currentBand);
+  const pill = document.getElementById('bandpill');
+  if (b) pill.textContent = b.name;
+  else if (pb) pill.textContent = pb.name;
+}
+
+// ─── PRIVATE BANDS ───────────────────────────────────────────────────────────
+function openPrivateModal(mode) {
+  const modal = document.getElementById('private-modal');
+  const content = document.getElementById('modal-content');
+  document.getElementById('modal-title').textContent = mode === 'create' ? 'CREAR BANDA PRIVADA' : 'UNIRSE POR QR';
+  modal.classList.add('open');
+
+  if (mode === 'create') {
+    content.innerHTML = `
+      <input class="modal-input" id="pb-name" placeholder="NOMBRE DE BANDA" maxlength="20"/>
+      <input class="modal-input" id="pb-pass" placeholder="CONTRASEÑA" type="password"/>
+      <button class="modal-btn" onclick="createPrivateBand()">CREAR Y GENERAR QR</button>
+      <div id="qr-container"></div>`;
+  } else {
+    content.innerHTML = `
+      <p style="font-size:11px;color:var(--gray-light);margin-bottom:12px;letter-spacing:1px;">
+        Apunta la cámara al QR de la banda privada para unirte.</p>
+      <button class="modal-btn" onclick="startQRScanner()">📷 ABRIR CÁMARA</button>`;
+  }
+}
+
+function closePrivateModal() {
+  document.getElementById('private-modal').classList.remove('open');
+}
+
+async function createPrivateBand() {
+  const name = document.getElementById('pb-name').value.toUpperCase().trim();
+  const pass = document.getElementById('pb-pass').value.trim();
+  if (!name || !pass) return;
+
+  const bandId = 'priv_' + uid().substring(0,8);
+  const band = { id: bandId, name, pass };
+  STATE.privateBands.push(band);
+  localStorage.setItem('privateBands', JSON.stringify(STATE.privateBands));
+  renderPrivateBands();
+
+  // Generate QR
+  const qrData = JSON.stringify({ id: bandId, name, pass });
+  const qrEl = document.getElementById('qr-container');
+  qrEl.innerHTML = '';
+  if (window.QRCode) {
+    new QRCode(qrEl, { text: qrData, width: 160, height: 160, colorDark: '#2ECC40', colorLight: '#0D1A10' });
+  }
+}
+
+// ─── QR SCANNER ───────────────────────────────────────────────────────────────
+let scannerStream = null;
+function startQRScanner() {
+  closePrivateModal();
+  const wrap = document.getElementById('scanner-wrap');
+  wrap.classList.add('open');
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(stream => {
+      scannerStream = stream;
+      const video = document.getElementById('scanner-video');
+      video.srcObject = stream;
+      scanQRFrame(video);
+    });
+}
+
+function scanQRFrame(video) {
+  if (!document.getElementById('scanner-wrap').classList.contains('open')) return;
+  const canvas = document.getElementById('scanner-canvas');
+  const ctx = canvas.getContext('2d');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    // jsQR would go here — for now log
+  }
+  requestAnimationFrame(() => scanQRFrame(video));
+}
+
+function closeScanner() {
+  document.getElementById('scanner-wrap').classList.remove('open');
+  if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+}
+
+function joinPrivateBand(data) {
+  try {
+    const band = JSON.parse(data);
+    if (band.id && band.name && band.pass) {
+      if (!STATE.privateBands.find(b => b.id === band.id)) {
+        STATE.privateBands.push(band);
+        localStorage.setItem('privateBands', JSON.stringify(STATE.privateBands));
+        renderPrivateBands();
+      }
+      selectBand(band.id);
+      closeScanner();
+    }
+  } catch(e) { console.warn('QR inválido'); }
+}
+
+// ─── ENCRYPTION (AES-256-GCM) ─────────────────────────────────────────────────
+async function getBandKey(bandId) {
+  if (STATE.bandKeys[bandId]) return STATE.bandKeys[bandId];
+  const bandInfo = BANDS.find(b => b.id === bandId);
+  const privateBand = STATE.privateBands.find(b => b.id === bandId);
+  if (!bandInfo?.encrypted && !privateBand) return null;
+
+  const password = privateBand ? privateBand.pass : (BAND_MASTER + '_band_' + bandId);
+  const salt = new TextEncoder().encode('meshchat_salt_v1_band' + bandId);
+  const keyMat = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMat, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+  );
+  STATE.bandKeys[bandId] = key;
+  return key;
+}
+
+async function encryptData(data, bandId) {
+  const key = await getBandKey(bandId);
+  if (!key) return { plain: true, data };
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(data));
+  return {
+    plain: false,
+    iv: Array.from(iv),
+    data: btoa(String.fromCharCode(...new Uint8Array(enc)))
+  };
+}
+
+async function decryptData(payload, bandId) {
+  if (payload.plain) return payload.data;
+  const key = await getBandKey(bandId);
+  if (!key) return null;
+  try {
+    const iv = new Uint8Array(payload.iv);
+    const enc = Uint8Array.from(atob(payload.data), c => c.charCodeAt(0));
+    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, enc);
+    return new TextDecoder().decode(dec);
+  } catch { return null; }
+}
+
+// ─── NATIVE BRIDGE (MeshPlugin) ───────────────────────────────────────────────
+async function broadcastMessage(msg) {
+  try {
+    if (window.Capacitor?.Plugins?.MeshPlugin) {
+      const payload = await encryptData(JSON.stringify(msg), msg.band);
+      await window.Capacitor.Plugins.MeshPlugin.broadcast({ payload: JSON.stringify(payload), band: msg.band });
+    }
+  } catch(e) { /* native not available in browser */ }
+}
+
+// Listen for messages from native mesh
+document.addEventListener('meshMessage', async (e) => {
+  try {
+    const payload = JSON.parse(e.detail.payload);
+    const decrypted = await decryptData(payload, e.detail.band);
+    if (decrypted) {
+      const msg = JSON.parse(decrypted);
+      msg.mine = false;
+      msg.expires = Date.now() + MSG_TTL;
+      addMessage(msg);
+      if (msg.type === 'alert') {
+        showAlertCard(msg);
+        if (navigator.vibrate) navigator.vibrate([500,200,500,200,1000]);
+        playTone(880, null, 0.8, 0.5);
+        setTimeout(() => ttsSpeak(`Alerta amber: ${msg.data}`), 900);
+      } else if (msg.type === 'voice') {
+        playNextelIncoming();
+      }
+    }
+  } catch(e) { console.warn('mesh msg error', e); }
+});
+
+// ─── SHARE APK ────────────────────────────────────────────────────────────────
+async function shareApk() {
+  try {
+    if (window.Capacitor?.Plugins?.MeshPlugin) {
+      await window.Capacitor.Plugins.MeshPlugin.shareApk();
+    } else {
+      alert('Esta función está disponible solo en la app instalada.');
+    }
+  } catch(e) { alert('Error al compartir APK: ' + e.message); }
+}
+
+// ─── AUTO DELETE (silent, no countdown) ───────────────────────────────────────
+function startAutoDelete() {
+  setInterval(() => {
+    const now = Date.now();
+    const before = STATE.messages.length;
+    STATE.messages = STATE.messages.filter(m => !m.expires || m.expires > now);
+    if (STATE.messages.length !== before) renderMessages();
+    // Clear voice cache for deleted messages
+    Object.keys(voiceCache).forEach(id => {
+      if (!STATE.messages.find(m => m.id === id)) {
+        URL.revokeObjectURL(voiceCache[id]);
+        delete voiceCache[id];
+      }
+    });
+  }, 30000);
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function uid() { return Date.now().toString(36) + Math.random().toString(36).substring(2,8); }
+function blobToBase64(blob) {
+  return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result.split(',')[1]); fr.readAsDataURL(blob); });
+}
+function base64ToBlob(b64, type) {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  return new Blob([bytes], { type });
+}
+</script>
+</body>
+</html>
