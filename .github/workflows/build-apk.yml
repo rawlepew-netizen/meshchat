@@ -6,22 +6,17 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-
       - uses: actions/setup-java@v4
         with:
           java-version: 17
           distribution: temurin
-
       - name: Install dependencies
         run: npm install
-
-      - name: Add Capacitor Android platform
+      - name: Add Capacitor Android
         run: npx cap add android
-
       - name: Copy native Kotlin files
         run: |
           PKG="android/app/src/main/java/com/bygrind/meshchat"
@@ -29,44 +24,52 @@ jobs:
           cp native/MainActivity.kt "$PKG/"
           cp native/MeshService.kt "$PKG/"
           cp native/MeshPlugin.kt "$PKG/"
-
-      - name: Replace AndroidManifest
-        run: cp native/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-
-      - name: Create file_paths.xml for FileProvider
+      - name: Patch AndroidManifest with permissions
         run: |
-          mkdir -p android/app/src/main/res/xml
-          cat > android/app/src/main/res/xml/file_paths.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <paths>
-            <external-path name="external" path="."/>
-            <files-path name="files" path="."/>
-          </paths>
-          EOF
-
+          python3 - << 'PYEOF'
+          import re
+          with open('android/app/src/main/AndroidManifest.xml','r') as f:
+            content = f.read()
+          perms = """
+              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"/>
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+              <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+              <uses-permission android:name="android.permission.CAMERA"/>
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+              <uses-permission android:name="android.permission.VIBRATE"/>
+          """
+          content = content.replace('</manifest>', perms + '</manifest>')
+          with open('android/app/src/main/AndroidManifest.xml','w') as f:
+            f.write(content)
+          print('Manifest patched OK')
+          PYEOF
+      - name: Add MeshService to AndroidManifest
+        run: |
+          python3 - << 'PYEOF'
+          with open('android/app/src/main/AndroidManifest.xml','r') as f:
+            content = f.read()
+          service = '        <service android:name=".MeshService" android:foregroundServiceType="connectedDevice" android:exported="false"/>'
+          content = content.replace('</application>', service + '\n    </application>')
+          with open('android/app/src/main/AndroidManifest.xml','w') as f:
+            f.write(content)
+          print('Service added OK')
+          PYEOF
       - name: Sync web assets
         run: npx cap sync android
-
       - name: Setup debug keystore
         run: |
           mkdir -p ~/.android
-          keytool -genkeypair -v \
-            -keystore ~/.android/debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
-
+          keytool -genkeypair -v -keystore ~/.android/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
       - name: Build APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: meshchat-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
