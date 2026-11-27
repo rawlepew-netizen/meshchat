@@ -17,7 +17,7 @@
   --safe-bot:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;background:var(--bg);color:var(--white);font-family:'Courier New',monospace;overflow:hidden;}
+html,body{height:100%;background:var(--bg);color:var(--white);font-family:'Arial Black',Arial,sans-serif;font-weight:900;overflow:hidden;}
 body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bottom:var(--safe-bot);}
 
 /* HEADER */
@@ -46,7 +46,7 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
 #ptt-btn.tx{border-color:var(--red);background:var(--red-glow);}
 #ptt-btn.tx #ptt-ring{border-color:var(--red);}
 #ptt-icon{font-size:38px;}
-#ptt-label{font-size:12px;font-weight:900;letter-spacing:4px;margin-top:4px;color:var(--green);}
+#ptt-label{font-size:36px;font-weight:700;letter-spacing:6px;color:var(--green);font-family:'Arial Black',Arial,sans-serif;}
 #ptt-btn.tx #ptt-label{color:var(--red);}
 #ptt-hint{margin-top:14px;font-size:9px;color:var(--gray-light);letter-spacing:2px;}
 
@@ -148,7 +148,6 @@ body{display:flex;flex-direction:column;padding-top:var(--safe-top);padding-bott
         <div id="ptt-btn"
           ontouchstart="pttStart(event)" ontouchend="pttEnd(event)"
           onmousedown="pttStart(event)" onmouseup="pttEnd(event)" onmouseleave="pttEnd(event)">
-          <div id="ptt-icon">🎙</div>
           <div id="ptt-label">PTT</div>
         </div>
       </div>
@@ -350,7 +349,6 @@ async function pttStart(e) {
 
   const btn = document.getElementById('ptt-btn');
   btn.classList.add('tx');
-  document.getElementById('ptt-icon').textContent = '📡';
   document.getElementById('ptt-label').textContent = 'TX';
   document.getElementById('ptt-hint').textContent = 'TRANSMITIENDO...';
   animatePTTRing(true);
@@ -382,7 +380,6 @@ async function pttEnd(e) {
 
   const btn = document.getElementById('ptt-btn');
   btn.classList.remove('tx');
-  document.getElementById('ptt-icon').textContent = '🎙';
   document.getElementById('ptt-label').textContent = 'PTT';
   document.getElementById('ptt-hint').textContent = 'MANTÉN PRESIONADO · 20s MÁX';
   animatePTTRing(false);
