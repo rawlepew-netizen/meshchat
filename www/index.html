@@ -263,6 +263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderPrivateBands();
   updateBandPill();
   startAutoDelete();
+  setupMeshListener();
 });
 
 // ─── CALLSIGN ─────────────────────────────────────────────────────────────────
@@ -717,11 +718,37 @@ async function decryptData(payload, bandId) {
 // ─── NATIVE BRIDGE (MeshPlugin) ───────────────────────────────────────────────
 async function broadcastMessage(msg) {
   try {
+    const payload = await encryptData(JSON.stringify(msg), msg.band);
     if (window.Capacitor?.Plugins?.MeshPlugin) {
-      const payload = await encryptData(JSON.stringify(msg), msg.band);
-      await window.Capacitor.Plugins.MeshPlugin.broadcast({ payload: JSON.stringify(payload), band: msg.band });
+      await window.Capacitor.Plugins.MeshPlugin.broadcast({ 
+        payload: JSON.stringify(payload), 
+        band: msg.band 
+      });
     }
-  } catch(e) { /* native not available in browser */ }
+  } catch(e) { console.warn('broadcast error:', e); }
+}
+
+function setupMeshListener() {
+  if (!window.Capacitor?.Plugins?.MeshPlugin) return;
+  window.Capacitor.Plugins.MeshPlugin.addListener('meshMessage', async (data) => {
+    try {
+      const payload = JSON.parse(data.payload);
+      const decrypted = await decryptData(payload, data.band);
+      if (!decrypted) return;
+      const msg = JSON.parse(decrypted);
+      msg.mine = false;
+      msg.expires = Date.now() + MSG_TTL;
+      addMessage(msg);
+      if (msg.type === 'alert') {
+        showAlertCard(msg);
+        if (navigator.vibrate) navigator.vibrate([500,200,500,200,1000]);
+        playTone(880, null, 0.8, 0.5);
+        setTimeout(() => ttsSpeak('Alerta amber: ' + msg.data), 900);
+      } else if (msg.type === 'voice') {
+        playNextelIncoming();
+      }
+    } catch(e) { console.warn('mesh msg error', e); }
+  });
 }
 
 // Listen for messages from native mesh
@@ -751,10 +778,16 @@ async function shareApk() {
   try {
     if (window.Capacitor?.Plugins?.MeshPlugin) {
       await window.Capacitor.Plugins.MeshPlugin.shareApk();
+    } else if (navigator.share) {
+      await navigator.share({
+        title: 'mesh chat',
+        text: 'Radio mesh Bluetooth sin internet - bygrind',
+        url: 'https://github.com/rawlepew-netizen/meshchat/actions'
+      });
     } else {
-      alert('Esta función está disponible solo en la app instalada.');
+      prompt('Copia este link para compartir:', 'https://github.com/rawlepew-netizen/meshchat/actions');
     }
-  } catch(e) { alert('Error al compartir APK: ' + e.message); }
+  } catch(e) { console.warn('share error:', e); }
 }
 
 // ─── AUTO DELETE (silent, no countdown) ───────────────────────────────────────
